@@ -1,1 +1,1504 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FEIRAX — Sistema de Vendas para Eventos</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
+  <style>
+    :root {
+      --primary: #dc2626;
+      --primary-hover: #b91c1c;
+      --primary-soft: rgba(220, 38, 38, 0.14);
+      --primary-glow: rgba(220, 38, 38, 0.35);
+      --success: #10b981;
+      --success-soft: rgba(16, 185, 129, 0.14);
+      --warning: #f59e0b;
+      --warning-soft: rgba(245, 158, 11, 0.14);
+      --danger: #ef4444;
+      --danger-soft: rgba(239, 68, 68, 0.14);
+      --info: #3b82f6;
+      --info-soft: rgba(59, 130, 246, 0.14);
+      --radius: 14px;
+      --transition: all 0.2s ease;
+    }
+
+    [data-theme="dark"] {
+      --bg-app: #09090b;
+      --bg-sidebar: #111113;
+      --bg-card: #18181b;
+      --bg-input: #27272a;
+      --border: #27272a;
+      --text: #f4f4f5;
+      --text-muted: #a1a1aa;
+      --shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.55);
+    }
+
+    [data-theme="light"] {
+      --bg-app: #f4f4f5;
+      --bg-sidebar: #111113;
+      --bg-card: #ffffff;
+      --bg-input: #f4f4f5;
+      --border: #e4e4e7;
+      --text: #18181b;
+      --text-muted: #71717a;
+      --shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.07);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', sans-serif; }
+    body { background: var(--bg-app); color: var(--text); min-height: 100vh; overflow-x: hidden; transition: var(--transition); }
+
+    .ambient-bg { position: fixed; inset: 0; pointer-events: none; z-index: 0; overflow: hidden; }
+    .ambient-orb {
+      position: absolute; width: 450px; height: 450px; border-radius: 50%;
+      background: radial-gradient(circle, var(--primary-soft) 0%, transparent 70%);
+      filter: blur(55px); animation: drift 16s infinite alternate ease-in-out;
+    }
+    .ambient-orb.second { right: -100px; bottom: -100px; animation-delay: -8s; }
+    @keyframes drift { 0% { transform: translate(-8%, -8%) scale(1); } 100% { transform: translate(12%, 12%) scale(1.1); } }
+
+    .layout { display: flex; min-height: 100vh; position: relative; z-index: 1; }
+    .sidebar {
+      width: 250px; background: var(--bg-sidebar); color: #f4f4f5;
+      border-right: 1px solid #27272a; display: flex; flex-direction: column;
+      position: fixed; top: 0; bottom: 0; left: 0; z-index: 100; transition: transform 0.3s ease;
+    }
+    .sidebar-brand { padding: 20px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid #27272a; }
+    .brand-badge {
+      width: 40px; height: 40px; border-radius: 10px;
+      background: linear-gradient(135deg, #dc2626, #7f1d1d);
+      display: flex; align-items: center; justify-content: center; color: #fff;
+    }
+    .sidebar-brand h1 { font-size: 1.3rem; font-weight: 800; }
+    .sidebar-brand span { font-size: 0.7rem; color: #a1a1aa; text-transform: uppercase; letter-spacing: 1px; }
+
+    .nav-list { flex: 1; padding: 14px 12px; display: flex; flex-direction: column; gap: 4px; overflow-y: auto; }
+    .nav-label { font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #71717a; padding: 10px 12px 4px; }
+    .nav-item {
+      display: flex; align-items: center; gap: 10px; padding: 10px 14px;
+      border-radius: 10px; color: #a1a1aa; font-size: 0.88rem; font-weight: 500;
+      cursor: pointer; transition: var(--transition); border: 1px solid transparent;
+    }
+    .nav-item:hover { background: rgba(255,255,255,0.05); color: #fff; }
+    .nav-item.active { background: var(--primary-soft); color: #fff; border-color: rgba(220,38,38,0.4); }
+    .nav-item.active i { color: var(--primary); }
+
+    .sidebar-fair-strip {
+      padding: 14px; border-top: 1px solid #27272a;
+      display: flex; justify-content: space-around; color: #71717a;
+    }
+
+    .main-area { flex: 1; margin-left: 250px; display: flex; flex-direction: column; min-width: 0; }
+    .topbar {
+      height: 66px; background: var(--bg-card); border-bottom: 1px solid var(--border);
+      padding: 0 22px; display: flex; align-items: center; justify-content: space-between;
+      position: sticky; top: 0; z-index: 50; gap: 10px;
+    }
+    .mobile-toggle { display: none; background: none; border: none; color: var(--text); cursor: pointer; }
+
+    .event-selector-pill {
+      display: flex; align-items: center; gap: 8px; background: var(--bg-input);
+      padding: 6px 14px; border-radius: 99px; border: 1px solid var(--border);
+    }
+    .event-selector-pill select {
+      background: transparent; border: none; color: var(--text);
+      font-weight: 700; font-size: 0.88rem; outline: none; cursor: pointer;
+    }
+    .event-selector-pill select option { background: var(--bg-card); color: var(--text); }
+
+    .page-content { padding: 24px; max-width: 1400px; width: 100%; margin: 0 auto; }
+    .section-view { display: none; animation: fadeIn 0.2s ease; }
+    .section-view.active { display: block; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+
+    .section-header { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 20px; }
+    .section-header h2 { font-size: 1.45rem; font-weight: 800; display: flex; align-items: center; gap: 10px; }
+    .section-header p { font-size: 0.86rem; color: var(--text-muted); margin-top: 2px; }
+
+    .card {
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 20px; box-shadow: var(--shadow);
+      transition: var(--transition); margin-bottom: 20px;
+    }
+    .card:hover { border-color: rgba(220, 38, 38, 0.35); }
+
+    .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(215px, 1fr)); gap: 16px; margin-bottom: 20px; }
+    .kpi-card {
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 18px; box-shadow: var(--shadow); transition: var(--transition);
+    }
+    .kpi-card:hover { transform: translateY(-2px); border-color: var(--primary); }
+    .kpi-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+    .kpi-title { font-size: 0.8rem; font-weight: 600; color: var(--text-muted); }
+    .kpi-icon { width: 36px; height: 36px; border-radius: 9px; display: flex; align-items: center; justify-content: center; }
+    .kpi-val { font-size: 1.5rem; font-weight: 800; }
+    .kpi-foot { font-size: 0.75rem; color: var(--text-muted); margin-top: 4px; }
+
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+      padding: 9px 15px; border-radius: 9px; font-size: 0.85rem; font-weight: 600;
+      border: 1px solid transparent; cursor: pointer; transition: var(--transition);
+    }
+    .btn-primary { background: var(--primary); color: #fff; }
+    .btn-primary:hover { background: var(--primary-hover); }
+    .btn-success { background: var(--success); color: #fff; }
+    .btn-warning { background: var(--warning); color: #111; }
+    .btn-secondary { background: var(--bg-input); color: var(--text); border-color: var(--border); }
+    .btn-secondary:hover { border-color: var(--primary); }
+    .btn-danger { background: var(--danger-soft); color: var(--danger); }
+    .btn-danger:hover { background: var(--danger); color: #fff; }
+    .btn-sm { padding: 6px 11px; font-size: 0.78rem; }
+
+    .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; }
+    .form-group { display: flex; flex-direction: column; gap: 5px; }
+    .form-group label { font-size: 0.78rem; font-weight: 600; color: var(--text-muted); }
+    .form-control {
+      background: var(--bg-input); border: 1px solid var(--border); color: var(--text);
+      padding: 10px 12px; border-radius: 9px; font-size: 0.88rem; outline: none; width: 100%;
+    }
+    .form-control:focus { border-color: var(--primary); }
+
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; text-align: left; }
+    th { padding: 11px; font-size: 0.74rem; text-transform: uppercase; color: var(--text-muted); border-bottom: 1px solid var(--border); }
+    td { padding: 11px; font-size: 0.88rem; border-bottom: 1px solid var(--border); vertical-align: middle; }
+
+    .badge { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 99px; font-size: 0.73rem; font-weight: 700; }
+    .badge-success { background: var(--success-soft); color: var(--success); }
+    .badge-warning { background: var(--warning-soft); color: var(--warning); }
+    .badge-danger { background: var(--danger-soft); color: var(--danger); }
+    .badge-info { background: var(--info-soft); color: var(--info); }
+    .badge-neutral { background: var(--bg-input); color: var(--text-muted); }
+
+    .charts-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 20px; margin-bottom: 20px; }
+    .chart-wrap { height: 260px; position: relative; }
+
+    .pdv-grid { display: grid; grid-template-columns: 1fr 390px; gap: 20px; align-items: start; }
+    .prod-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(175px, 1fr)); gap: 12px; margin-top: 14px; }
+    .prod-card {
+      background: var(--bg-input); border: 1px solid var(--border); border-radius: 12px;
+      padding: 14px; cursor: pointer; transition: var(--transition);
+      display: flex; flex-direction: column; justify-content: space-between;
+    }
+    .prod-card:hover:not(.out) { border-color: var(--primary); transform: translateY(-2px); }
+    .prod-card.out { opacity: 0.45; cursor: not-allowed; }
+
+    .cart-list { max-height: 270px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; margin: 12px 0; }
+    .cart-row { display: flex; justify-content: space-between; align-items: center; background: var(--bg-input); padding: 10px; border-radius: 8px; gap: 8px; }
+    .qty-btn { width: 26px; height: 26px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg-card); color: var(--text); font-weight: 700; cursor: pointer; }
+
+    .modal-bg {
+      position: fixed; inset: 0; background: rgba(0, 0, 0, 0.75); backdrop-filter: blur(4px);
+      display: none; align-items: center; justify-content: center; z-index: 1000; padding: 16px;
+    }
+    .modal-bg.open { display: flex; }
+    .modal-box {
+      background: var(--bg-card); border: 1px solid var(--border); border-radius: 16px;
+      width: 100%; max-width: 540px; padding: 22px; max-height: 90vh; overflow-y: auto;
+    }
+    .modal-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+
+    .toast-box { position: fixed; bottom: 20px; right: 20px; z-index: 2000; display: flex; flex-direction: column; gap: 8px; }
+    .toast {
+      background: var(--bg-card); border: 1px solid var(--border); border-left: 4px solid var(--primary);
+      padding: 12px 16px; border-radius: 8px; font-size: 0.85rem; box-shadow: var(--shadow);
+    }
+    .toast.success { border-left-color: var(--success); }
+    .toast.error { border-left-color: var(--danger); }
+
+    @media print {
+      .sidebar, .topbar, .no-print, .toast-box, .ambient-bg { display: none !important; }
+      .main-area { margin-left: 0 !important; }
+      body { background: #fff !important; color: #000 !important; }
+      .card, .kpi-card { box-shadow: none !important; border: 1px solid #ccc !important; }
+    }
+    @media (max-width: 1024px) { .pdv-grid { grid-template-columns: 1fr; } }
+    @media (max-width: 768px) {
+      .sidebar { transform: translateX(-100%); }
+      .sidebar.open { transform: translateX(0); }
+      .main-area { margin-left: 0; }
+      .mobile-toggle { display: block; }
+      .charts-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="ambient-bg"><div class="ambient-orb"></div><div class="ambient-orb second"></div></div>
+  <div id="toastBox" class="toast-box"></div>
+
+  <div class="layout">
+    <!-- Menu Lateral -->
+    <aside id="sidebar" class="sidebar">
+      <div class="sidebar-brand">
+        <div class="brand-badge"><i data-lucide="store"></i></div>
+        <div>
+          <h1>FEIRAX</h1>
+          <span>Vendas & Eventos</span>
+        </div>
+      </div>
+
+      <nav class="nav-list">
+        <div class="nav-label">Painel & Eventos</div>
+        <a class="nav-item active" data-view="dashboard" onclick="navigate('dashboard')">
+          <i data-lucide="layout-dashboard"></i> Dashboard Geral
+        </a>
+        <a class="nav-item" data-view="eventos" onclick="navigate('eventos')">
+          <i data-lucide="calendar-days"></i> Eventos e Feiras
+        </a>
+
+        <div class="nav-label">Vendas & Comandas</div>
+        <a class="nav-item" data-view="pdv" onclick="navigate('pdv')">
+          <i data-lucide="shopping-cart"></i> PDV / Comandas
+        </a>
+        <a class="nav-item" data-view="fiados" onclick="navigate('fiados')">
+          <i data-lucide="clock"></i> Fiados (A Receber)
+        </a>
+        <a class="nav-item" data-view="recebidos" onclick="navigate('recebidos')">
+          <i data-lucide="wallet"></i> Recebidos (Caixa)
+        </a>
+
+        <div class="nav-label">Estoque & Custos</div>
+        <a class="nav-item" data-view="produtos" onclick="navigate('produtos')">
+          <i data-lucide="package"></i> Produtos & Estoque
+        </a>
+        <a class="nav-item" data-view="despesas" onclick="navigate('despesas')">
+          <i data-lucide="trending-down"></i> Despesas (Compras)
+        </a>
+        <a class="nav-item" data-view="clientes" onclick="navigate('clientes')">
+          <i data-lucide="users"></i> Clientes
+        </a>
+      </nav>
+
+      <div class="sidebar-fair-strip" title="Café, Queijos, Doces e Bebidas">
+        <i data-lucide="coffee" style="width:16px;"></i>
+        <i data-lucide="utensils" style="width:16px;"></i>
+        <i data-lucide="cake-slice" style="width:16px;"></i>
+        <i data-lucide="cup-soda" style="width:16px;"></i>
+        <i data-lucide="sparkles" style="width:16px;"></i>
+      </div>
+    </aside>
+
+    <!-- Área Principal -->
+    <div class="main-area">
+      <header class="topbar">
+        <div style="display:flex; align-items:center; gap:10px;">
+          <button class="mobile-toggle" onclick="document.getElementById('sidebar').classList.toggle('open')">
+            <i data-lucide="menu"></i>
+          </button>
+          <div class="event-selector-pill">
+            <i data-lucide="calendar-check" style="width:16px; color:var(--primary);"></i>
+            <span style="font-size:0.78rem; color:var(--text-muted);">Evento:</span>
+            <select id="activeEventSelect" onchange="changeActiveEvent(this.value)"></select>
+          </div>
+        </div>
+
+        <div style="display:flex; align-items:center; gap:8px;" class="no-print">
+          <span id="dbStatusBadge" class="badge badge-warning">Supabase: Desconectado</span>
+          <button onclick="openModal('modalSupabase')" class="btn btn-secondary btn-sm" title="Configurar URL e Key do Supabase">
+            <i data-lucide="database" style="width:14px;"></i> Configurar Banco
+          </button>
+          <button onclick="syncSupabase()" class="btn btn-secondary btn-sm" title="Atualizar Dados">
+            <i data-lucide="refresh-cw" style="width:14px;"></i>
+          </button>
+          <button onclick="toggleTheme()" class="btn btn-secondary btn-sm" title="Tema Claro/Escuro">
+            <i data-lucide="sun-moon" style="width:15px;"></i>
+          </button>
+        </div>
+      </header>
+
+      <main class="page-content">
+        <!-- 1. DASHBOARD GERAL -->
+        <section id="view-dashboard" class="section-view active">
+          <div class="section-header">
+            <div>
+              <h2 id="dashTitle"><i data-lucide="layout-dashboard" style="color:var(--primary);"></i> Dashboard do Evento</h2>
+              <p id="dashSubtitle">Visão geral de vendas, recebimentos, fiados, despesas e lucro líquido.</p>
+            </div>
+            <button onclick="window.print()" class="btn btn-primary no-print">
+              <i data-lucide="printer" style="width:16px;"></i> Imprimir / PDF
+            </button>
+          </div>
+
+          <div class="kpi-grid" id="dashKpis"></div>
+
+          <div class="charts-grid">
+            <div class="card">
+              <h3 style="font-size:0.98rem; margin-bottom:12px;">Vendas por Evento (R$)</h3>
+              <div class="chart-wrap"><canvas id="chartEventos"></canvas></div>
+            </div>
+            <div class="card">
+              <h3 style="font-size:0.98rem; margin-bottom:12px;">Entradas por Forma de Pagamento</h3>
+              <div class="chart-wrap"><canvas id="chartPagamentos"></canvas></div>
+            </div>
+            <div class="card">
+              <h3 style="font-size:0.98rem; margin-bottom:12px;">Recebido vs. Fiado Pendente</h3>
+              <div class="chart-wrap"><canvas id="chartFiados"></canvas></div>
+            </div>
+            <div class="card">
+              <h3 style="font-size:0.98rem; margin-bottom:12px;">Produtos Mais Vendidos no Evento</h3>
+              <div class="chart-wrap"><canvas id="chartProdutos"></canvas></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 2. EVENTOS E FEIRAS -->
+        <section id="view-eventos" class="section-view">
+          <div class="section-header">
+            <div>
+              <h2><i data-lucide="calendar-days" style="color:var(--primary);"></i> Eventos e Feiras</h2>
+              <p>Gerencie cada evento de forma independente (Festa Junina — 20/07, Feira de Produtos Coloniais, Festa da Cidade, Feira de Artesanato).</p>
+            </div>
+            <div style="display:flex; gap:8px;">
+              <button onclick="seedSampleEvents()" class="btn btn-secondary btn-sm">+ Criar Eventos Exemplo</button>
+              <button onclick="openEventoModal()" class="btn btn-primary">+ Novo Evento</button>
+            </div>
+          </div>
+          <div id="eventosCardsGrid" class="kpi-grid"></div>
+        </section>
+        <!-- 3. PDV / COMANDAS -->
+        <section id="view-pdv" class="section-view">
+          <div class="section-header">
+            <div>
+              <h2><i data-lucide="shopping-cart" style="color:var(--primary);"></i> PDV — Alimentação de Comandas</h2>
+              <p>Clique nos produtos para alimentar a comanda e finalize à vista ou em aberto (fiado).</p>
+            </div>
+          </div>
+
+          <div class="pdv-grid">
+            <div class="card">
+              <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                <input type="text" id="pdvSearch" class="form-control" style="flex:1;" placeholder="Pesquisar produto..." oninput="renderPdv()" />
+                <select id="pdvCatFilter" class="form-control" style="width:auto;" onchange="renderPdv()">
+                  <option value="">Todas Categorias</option>
+                  <option value="Café">Café</option>
+                  <option value="Queijos">Queijos</option>
+                  <option value="Doces">Doces</option>
+                  <option value="Bebidas">Bebidas</option>
+                  <option value="Espetinhos">Espetinhos</option>
+                  <option value="Artesanato">Artesanato</option>
+                  <option value="Outros">Outros</option>
+                </select>
+              </div>
+              <div id="pdvProductGrid" class="prod-grid"></div>
+            </div>
+
+            <div class="card" style="position:sticky; top:82px;">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                <h3 style="font-size:1.05rem;">Comanda Atual</h3>
+                <button onclick="clearCart()" class="btn btn-secondary btn-sm">Limpar</button>
+              </div>
+
+              <div class="form-group">
+                <label>Cliente (Obrigatório para Comanda Fiada)</label>
+                <div style="display:flex; gap:6px;">
+                  <select id="pdvClienteSelect" class="form-control"></select>
+                  <button onclick="openClienteModal()" class="btn btn-secondary btn-sm">+ Novo</button>
+                </div>
+              </div>
+
+              <div id="pdvCartList" class="cart-list"></div>
+
+              <div style="border-top:1px solid var(--border); padding-top:12px; display:flex; flex-direction:column; gap:10px;">
+                <div style="display:flex; justify-content:space-between; font-size:1.2rem; font-weight:800;">
+                  <span>Total:</span>
+                  <span id="pdvTotal" style="color:var(--primary);">R$ 0,00</span>
+                </div>
+
+                <div class="form-group">
+                  <label>Forma de Pagamento (Se pagar agora)</label>
+                  <select id="pdvPaymentMethod" class="form-control">
+                    <option value="Dinheiro">Dinheiro</option>
+                    <option value="PIX">PIX</option>
+                    <option value="Cartão">Cartão</option>
+                  </select>
+                </div>
+
+                <div class="form-group">
+                  <label>Valor Pago Agora (R$) — Vazio = tudo | 0 = fiado</label>
+                  <input type="number" id="pdvPaidInput" class="form-control" step="0.50" min="0" placeholder="0,00 ou valor parcial" />
+                </div>
+
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+                  <button onclick="finalizarVenda(true)" class="btn btn-warning">
+                    <i data-lucide="clock" style="width:15px;"></i> Deixar Fiado
+                  </button>
+                  <button onclick="finalizarVenda(false)" class="btn btn-success">
+                    <i data-lucide="check-circle" style="width:15px;"></i> Pagar Agora
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 4. FIADOS -->
+        <section id="view-fiados" class="section-view">
+          <div class="section-header">
+            <div>
+              <h2><i data-lucide="clock" style="color:var(--primary);"></i> Fiados — Comandas em Aberto</h2>
+              <p>Clientes com saldo pendente neste evento. Clique em "Receber" para quitar total ou parcialmente.</p>
+            </div>
+            <strong id="fiadosTotalHeader" style="color:var(--warning); font-size:1.1rem;">Total em Aberto: R$ 0,00</strong>
+          </div>
+
+          <div class="card">
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Cliente</th>
+                    <th>Data/Hora</th>
+                    <th>Itens na Comanda</th>
+                    <th>Valor Total</th>
+                    <th>Já Pago</th>
+                    <th>Saldo Devedor</th>
+                    <th>Ação</th>
+                  </tr>
+                </thead>
+                <tbody id="fiadosTableBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- 5. RECEBIDOS -->
+        <section id="view-recebidos" class="section-view">
+          <div class="section-header">
+            <div>
+              <h2><i data-lucide="wallet" style="color:var(--primary);"></i> Recebidos — Entradas de Caixa</h2>
+              <p>Histórico detalhado de recebimentos em Dinheiro, PIX e Cartão no evento ativo.</p>
+            </div>
+          </div>
+
+          <div class="kpi-grid" id="recebidosKpis"></div>
+
+          <div class="card">
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Data/Hora</th>
+                    <th>Cliente</th>
+                    <th>Descrição / Comanda</th>
+                    <th>Forma</th>
+                    <th>Valor Recebido</th>
+                  </tr>
+                </thead>
+                <tbody id="recebidosTableBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- 6. PRODUTOS & ESTOQUE -->
+        <section id="view-produtos" class="section-view">
+          <div class="section-header">
+            <div>
+              <h2><i data-lucide="package" style="color:var(--primary);"></i> Produtos & Estoque Próprio</h2>
+              <p>Cada evento mantém sua própria tabela de produtos, preços e estoque.</p>
+            </div>
+            <button onclick="openProdutoModal()" class="btn btn-primary">+ Novo Produto</button>
+          </div>
+
+          <div class="card">
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Produto</th>
+                    <th>Categoria</th>
+                    <th>Preço Venda</th>
+                    <th>Estoque Próprio</th>
+                    <th>Ações</th>
+                  </tr>
+                </thead>
+                <tbody id="produtosTableBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- 7. DESPESAS -->
+        <section id="view-despesas" class="section-view">
+          <div class="section-header">
+            <div>
+              <h2><i data-lucide="trending-down" style="color:var(--primary);"></i> Despesas e Compras do Evento</h2>
+              <p>Registre tudo o que foi comprado ou gasto para realizar o evento e calcular lucro ou prejuízo.</p>
+            </div>
+            <strong id="despesasTotalHeader" style="color:var(--danger); font-size:1.1rem;">Total Despesas: R$ 0,00</strong>
+          </div>
+
+          <div class="card">
+            <form onsubmit="addDespesa(event)" class="form-grid">
+              <div class="form-group">
+                <label>Descrição da Compra / Despesa *</label>
+                <input type="text" id="despNome" class="form-control" required placeholder="Ex: Compra de queijos, café, carvão, aluguel..." />
+              </div>
+              <div class="form-group">
+                <label>Categoria</label>
+                <select id="despCat" class="form-control">
+                  <option value="Mercadorias">Mercadorias</option>
+                  <option value="Aluguel de Espaço">Aluguel de Espaço</option>
+                  <option value="Transporte">Transporte</option>
+                  <option value="Funcionários">Funcionários</option>
+                  <option value="Materiais / Embalagens">Materiais / Embalagens</option>
+                  <option value="Outros">Outros</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Valor (R$) *</label>
+                <input type="number" id="despValor" class="form-control" required min="0.01" step="0.01" />
+              </div>
+              <div class="form-group">
+                <label>Data *</label>
+                <input type="date" id="despData" class="form-control" required />
+              </div>
+              <div class="form-group" style="justify-content:flex-end;">
+                <button type="submit" class="btn btn-primary" style="height:41px;">+ Lançar Despesa</button>
+              </div>
+            </form>
+          </div>
+
+          <div class="card">
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Data</th><th>Descrição</th><th>Categoria</th><th>Valor</th><th>Ação</th></tr></thead>
+                <tbody id="despesasTableBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- 8. CLIENTES -->
+        <section id="view-clientes" class="section-view">
+          <div class="section-header">
+            <div>
+              <h2><i data-lucide="users" style="color:var(--primary);"></i> Clientes e Comandas Relacionadas</h2>
+              <p>Gerencie os clientes e acompanhe o total gasto e o saldo pendente de cada um.</p>
+            </div>
+            <button onclick="openClienteModal()" class="btn btn-primary">+ Novo Cliente</button>
+          </div>
+
+          <div class="card">
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Nome</th>
+                    <th>Telefone</th>
+                    <th>Observações</th>
+                    <th>Total Comprado</th>
+                    <th>Saldo Devedor</th>
+                    <th>Ações</th>
+                  </tr>
+                </thead>
+                <tbody id="clientesTableBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <!-- MODAL CONFIGURAÇÃO SUPABASE -->
+  <div id="modalSupabase" class="modal-bg">
+    <div class="modal-box">
+      <div class="modal-head">
+        <h3>Conexão Direta com Supabase</h3>
+        <button onclick="closeModal('modalSupabase')" class="btn btn-secondary btn-sm">X</button>
+      </div>
+      <form onsubmit="saveSupabaseCredentials(event)">
+        <p style="font-size:0.84rem; color:var(--text-muted); margin-bottom:14px;">
+          Cole abaixo a <strong>Project URL</strong> e a <strong>Publishable / Anon Key</strong> do seu projeto Supabase. O acesso é direto, sem necessidade de login.
+        </p>
+        <div class="form-group" style="margin-bottom:12px;">
+          <label>Supabase Project URL *</label>
+          <input type="url" id="sbUrlInput" class="form-control" required placeholder="https://seu-projeto.supabase.co" />
+        </div>
+        <div class="form-group" style="margin-bottom:16px;">
+          <label>Supabase Publishable / Anon Key *</label>
+          <input type="text" id="sbKeyInput" class="form-control" required placeholder="Cole sua chave pública anon/publishable..." />
+        </div>
+        <div style="display:flex; justify-content:flex-end; gap:8px;">
+          <button type="button" onclick="closeModal('modalSupabase')" class="btn btn-secondary">Fechar</button>
+          <button type="submit" class="btn btn-primary">Salvar e Conectar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL EVENTO -->
+  <div id="modalEvento" class="modal-bg">
+    <div class="modal-box">
+      <div class="modal-head">
+        <h3 id="modalEvTitle">Cadastrar Evento</h3>
+        <button onclick="closeModal('modalEvento')" class="btn btn-secondary btn-sm">X</button>
+      </div>
+      <form onsubmit="saveEvento(event)">
+        <input type="hidden" id="evId" />
+        <div class="form-grid" style="margin-bottom:14px;">
+          <div class="form-group" style="grid-column:1/-1;">
+            <label>Nome do Evento *</label>
+            <input type="text" id="evNome" class="form-control" required placeholder="Ex: Festa Junina — 20/07" />
+          </div>
+          <div class="form-group">
+            <label>Data de Início *</label>
+            <input type="date" id="evInicio" class="form-control" required />
+          </div>
+          <div class="form-group">
+            <label>Data de Término *</label>
+            <input type="date" id="evFim" class="form-control" required />
+          </div>
+          <div class="form-group">
+            <label>Local *</label>
+            <input type="text" id="evLocal" class="form-control" required placeholder="Ex: Parque de Exposições" />
+          </div>
+          <div class="form-group">
+            <label>Status *</label>
+            <select id="evStatus" class="form-control">
+              <option value="planejado">Planejado</option>
+              <option value="em_andamento">Em andamento</option>
+              <option value="finalizado">Finalizado</option>
+            </select>
+          </div>
+          <div class="form-group" style="grid-column:1/-1;">
+            <label>Descrição</label>
+            <textarea id="evDesc" class="form-control" rows="2"></textarea>
+          </div>
+        </div>
+        <div style="display:flex; justify-content:flex-end; gap:8px;">
+          <button type="button" onclick="closeModal('modalEvento')" class="btn btn-secondary">Cancelar</button>
+          <button type="submit" class="btn btn-primary">Salvar Evento</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL PRODUTO -->
+  <div id="modalProduto" class="modal-bg">
+    <div class="modal-box">
+      <div class="modal-head">
+        <h3 id="modalProdTitle">Cadastrar Produto</h3>
+        <button onclick="closeModal('modalProduto')" class="btn btn-secondary btn-sm">X</button>
+      </div>
+      <form onsubmit="saveProduto(event)">
+        <input type="hidden" id="prodId" />
+        <div class="form-grid" style="margin-bottom:14px;">
+          <div class="form-group" style="grid-column:1/-1;">
+            <label>Nome do Produto *</label>
+            <input type="text" id="prodNome" class="form-control" required placeholder="Ex: Queijo Colonial, Café, Doce..." />
+          </div>
+          <div class="form-group">
+            <label>Categoria</label>
+            <select id="prodCat" class="form-control">
+              <option value="Café">Café</option>
+              <option value="Queijos">Queijos</option>
+              <option value="Doces">Doces</option>
+              <option value="Bebidas">Bebidas</option>
+              <option value="Espetinhos">Espetinhos</option>
+              <option value="Artesanato">Artesanato</option>
+              <option value="Outros">Outros</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Preço de Venda (R$) *</label>
+            <input type="number" id="prodPreco" class="form-control" required min="0.01" step="0.01" />
+          </div>
+          <div class="form-group">
+            <label>Estoque Próprio (Unidades) *</label>
+            <input type="number" id="prodEstoque" class="form-control" required min="0" />
+          </div>
+        </div>
+        <div style="display:flex; justify-content:flex-end; gap:8px;">
+          <button type="button" onclick="closeModal('modalProduto')" class="btn btn-secondary">Cancelar</button>
+          <button type="submit" class="btn btn-primary">Salvar Produto</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL CLIENTE -->
+  <div id="modalCliente" class="modal-bg">
+    <div class="modal-box">
+      <div class="modal-head">
+        <h3 id="modalCliTitle">Cadastrar Cliente</h3>
+        <button onclick="closeModal('modalCliente')" class="btn btn-secondary btn-sm">X</button>
+      </div>
+      <form onsubmit="saveCliente(event)">
+        <input type="hidden" id="cliId" />
+        <div class="form-grid" style="margin-bottom:14px;">
+          <div class="form-group" style="grid-column:1/-1;">
+            <label>Nome Completo *</label>
+            <input type="text" id="cliNome" class="form-control" required placeholder="Ex: Geremy" />
+          </div>
+          <div class="form-group">
+            <label>Telefone</label>
+            <input type="text" id="cliTel" class="form-control" placeholder="(00) 00000-0000" />
+          </div>
+          <div class="form-group">
+            <label>Observações</label>
+            <input type="text" id="cliObs" class="form-control" />
+          </div>
+        </div>
+        <div style="display:flex; justify-content:flex-end; gap:8px;">
+          <button type="button" onclick="closeModal('modalCliente')" class="btn btn-secondary">Cancelar</button>
+          <button type="submit" class="btn btn-primary">Salvar Cliente</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL RECEBER FIADO -->
+  <div id="modalReceber" class="modal-bg">
+    <div class="modal-box">
+      <div class="modal-head">
+        <h3>Receber Pagamento de Comanda</h3>
+        <button onclick="closeModal('modalReceber')" class="btn btn-secondary btn-sm">X</button>
+      </div>
+      <form onsubmit="confirmarRecebimento(event)">
+        <input type="hidden" id="recComandaId" />
+        <div id="recInfoBox" style="background:var(--bg-input); padding:12px; border-radius:8px; margin-bottom:14px; font-size:0.88rem;"></div>
+        <div class="form-grid" style="margin-bottom:14px;">
+          <div class="form-group">
+            <label>Valor Recebido Agora (R$) *</label>
+            <input type="number" id="recValor" class="form-control" required min="0.01" step="0.01" />
+          </div>
+          <div class="form-group">
+            <label>Forma de Pagamento *</label>
+            <select id="recForma" class="form-control">
+              <option value="Dinheiro">Dinheiro</option>
+              <option value="PIX">PIX</option>
+              <option value="Cartão">Cartão</option>
+            </select>
+          </div>
+        </div>
+        <div style="display:flex; justify-content:flex-end; gap:8px;">
+          <button type="button" onclick="closeModal('modalReceber')" class="btn btn-secondary">Cancelar</button>
+          <button type="submit" class="btn btn-success">Confirmar Recebimento</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    // =========================================================================
+    // CONFIGURAÇÃO DO SUPABASE — INSIRA SUA PROJECT URL E SUA PUBLISHABLE KEY
+    // =========================================================================
+    const SUPABASE_CONFIG = {
+      URL: 'https://agvpsmtliyyqwhguvpsn.supabase.co',
+      KEY: 'sb_publishable_bxvl7tDh4h4RDnNORh4ruw_e-xpG3AX'
+    };
+
+    let sb = null;
+    let cart = [];
+    let charts = {};
+
+    const state = {
+      activeEventId: localStorage.getItem('feirax_active_event') || '',
+      eventos: [],
+      produtos: [],
+      clientes: [],
+      comandas: [],
+      recebimentos: [],
+      despesas: []
+    };
+
+    function money(v) { return Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }); }
+    function fmtDate(d) { return d ? d.split('-').reverse().join('/') : '-'; }
+
+    function toast(msg, type = 'success') {
+      const box = document.getElementById('toastBox');
+      const el = document.createElement('div');
+      el.className = `toast ${type}`;
+      el.textContent = msg;
+      box.appendChild(el);
+      setTimeout(() => el.remove(), 3800);
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      lucide.createIcons();
+      const theme = localStorage.getItem('feirax_theme') || 'dark';
+      document.documentElement.setAttribute('data-theme', theme);
+      document.getElementById('despData').value = new Date().toISOString().split('T')[0];
+
+      const savedUrl = localStorage.getItem('feirax_sb_url') || (SUPABASE_CONFIG.URL.startsWith('http') ? SUPABASE_CONFIG.URL : '');
+      const savedKey = localStorage.getItem('feirax_sb_key') || (SUPABASE_CONFIG.KEY !== 'COLE_AQUI_SUA_SUPABASE_PUBLISHABLE_ANON_KEY' ? SUPABASE_CONFIG.KEY : '');
+
+      document.getElementById('sbUrlInput').value = savedUrl;
+      document.getElementById('sbKeyInput').value = savedKey;
+
+      if (savedUrl && savedKey) {
+        initSupabase(savedUrl, savedKey);
+      } else {
+        openModal('modalSupabase');
+      }
+    });
+
+    function toggleTheme() {
+      const next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+      document.documentElement.setAttribute('data-theme', next);
+      localStorage.setItem('feirax_theme', next);
+      renderAll();
+    }
+
+    function navigate(viewId) {
+      document.querySelectorAll('.section-view').forEach(el => el.classList.remove('active'));
+      document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+      document.getElementById('view-' + viewId).classList.add('active');
+      document.querySelector(`.nav-item[data-view="${viewId}"]`).classList.add('active');
+      document.getElementById('sidebar').classList.remove('open');
+      renderAll();
+    }
+
+    function openModal(id) { document.getElementById(id).classList.add('open'); }
+    function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+    // =========================================================================
+    // CONEXÃO DIRETA COM SUPABASE (SEM LOGIN)
+    // =========================================================================
+    function saveSupabaseCredentials(e) {
+      e.preventDefault();
+      const url = document.getElementById('sbUrlInput').value.trim();
+      const key = document.getElementById('sbKeyInput').value.trim();
+      localStorage.setItem('feirax_sb_url', url);
+      localStorage.setItem('feirax_sb_key', key);
+      closeModal('modalSupabase');
+      initSupabase(url, key);
+    }
+
+    async function initSupabase(url, key) {
+      try {
+        sb = window.supabase.createClient(url, key);
+        const badge = document.getElementById('dbStatusBadge');
+        badge.className = 'badge badge-success';
+        badge.textContent = 'Supabase Conectado';
+        await syncSupabase();
+      } catch (err) {
+        const badge = document.getElementById('dbStatusBadge');
+        badge.className = 'badge badge-danger';
+        badge.textContent = 'Erro de Conexão';
+        toast('Erro ao conectar: ' + err.message, 'error');
+      }
+    }
+
+    async function syncSupabase() {
+      if (!sb) return openModal('modalSupabase');
+      try {
+        const [ev, pr, cl, co, re, de] = await Promise.all([
+          sb.from('eventos').select('*').order('inicio', { ascending: false }),
+          sb.from('produtos').select('*').order('nome', { ascending: true }),
+          sb.from('clientes').select('*').order('nome', { ascending: true }),
+          sb.from('comandas').select('*').order('data_hora', { ascending: false }),
+          sb.from('recebimentos').select('*').order('data_hora', { ascending: false }),
+          sb.from('despesas').select('*').order('data', { ascending: false })
+        ]);
+
+        if (ev.error) throw ev.error;
+        state.eventos = ev.data || [];
+        state.produtos = pr.data || [];
+        state.clientes = cl.data || [];
+        state.comandas = co.data || [];
+        state.recebimentos = re.data || [];
+        state.despesas = de.data || [];
+
+        if (!state.activeEventId || !state.eventos.some(e => e.id === state.activeEventId)) {
+          state.activeEventId = state.eventos[0]?.id || '';
+          localStorage.setItem('feirax_active_event', state.activeEventId);
+        }
+
+        renderAll();
+      } catch (err) {
+        toast('Erro ao sincronizar. Verifique se executou o SQL no Supabase: ' + err.message, 'error');
+      }
+    }
+
+    // =========================================================================
+    // CRUD SUPABASE (EVENTOS, PRODUTOS, CLIENTES, VENDAS, FIADOS E DESPESAS)
+    // =========================================================================
+    function changeActiveEvent(id) {
+      state.activeEventId = id;
+      localStorage.setItem('feirax_active_event', id);
+      cart = [];
+      renderAll();
+    }
+
+    async function seedSampleEvents() {
+      if (!sb) return openModal('modalSupabase');
+      const samples = [
+        { nome: 'Festa Junina — 20/07', inicio: '2026-07-20', fim: '2026-07-20', local: 'Praça Central', descricao: 'Barraca de comidas típicas e bebidas.', status: 'em_andamento' },
+        { nome: 'Feira de Produtos Coloniais', inicio: '2026-08-05', fim: '2026-08-07', local: 'Pavilhão de Exposições', descricao: 'Queijos, cafés e doces artesanais.', status: 'planejado' },
+        { nome: 'Festa da Cidade', inicio: '2026-09-12', fim: '2026-09-14', local: 'Parque Municipal', descricao: 'Evento anual da cidade.', status: 'planejado' },
+        { nome: 'Feira de Artesanato', inicio: '2026-06-10', fim: '2026-06-11', local: 'Centro Cultural', descricao: 'Exposição artesanal.', status: 'finalizado' }
+      ];
+      const { error } = await sb.from('eventos').insert(samples);
+      if (error) return toast(error.message, 'error');
+      await syncSupabase();
+      toast('Eventos de exemplo criados!');
+    }
+
+    function openEventoModal(id = null) {
+      document.getElementById('evId').value = '';
+      document.getElementById('evNome').value = '';
+      document.getElementById('evInicio').value = new Date().toISOString().split('T')[0];
+      document.getElementById('evFim').value = new Date().toISOString().split('T')[0];
+      document.getElementById('evLocal').value = '';
+      document.getElementById('evStatus').value = 'planejado';
+      document.getElementById('evDesc').value = '';
+      document.getElementById('modalEvTitle').textContent = id ? 'Editar Evento' : 'Cadastrar Evento';
+
+      if (id) {
+        const ev = state.eventos.find(x => x.id === id);
+        if (ev) {
+          document.getElementById('evId').value = ev.id;
+          document.getElementById('evNome').value = ev.nome;
+          document.getElementById('evInicio').value = ev.inicio;
+          document.getElementById('evFim').value = ev.fim;
+          document.getElementById('evLocal').value = ev.local;
+          document.getElementById('evStatus').value = ev.status;
+          document.getElementById('evDesc').value = ev.descricao || '';
+        }
+      }
+      openModal('modalEvento');
+    }
+
+    async function saveEvento(e) {
+      e.preventDefault();
+      if (!sb) return openModal('modalSupabase');
+      const id = document.getElementById('evId').value;
+      const payload = {
+        nome: document.getElementById('evNome').value.trim(),
+        inicio: document.getElementById('evInicio').value,
+        fim: document.getElementById('evFim').value,
+        local: document.getElementById('evLocal').value.trim(),
+        status: document.getElementById('evStatus').value,
+        descricao: document.getElementById('evDesc').value.trim()
+      };
+
+      if (id) {
+        const { error } = await sb.from('eventos').update(payload).eq('id', id);
+        if (error) return toast(error.message, 'error');
+      } else {
+        const { data, error } = await sb.from('eventos').insert(payload).select().single();
+        if (error) return toast(error.message, 'error');
+        state.activeEventId = data.id;
+        localStorage.setItem('feirax_active_event', data.id);
+      }
+      closeModal('modalEvento');
+      await syncSupabase();
+      toast('Evento salvo!');
+    }
+
+    async function deleteEvento(id) {
+      if (!confirm('Excluir este evento e todos os dados vinculados a ele?')) return;
+      const { error } = await sb.from('eventos').delete().eq('id', id);
+      if (error) return toast(error.message, 'error');
+      await syncSupabase();
+      toast('Evento excluído.');
+    }
+
+    function openProdutoModal(id = null) {
+      if (!state.activeEventId) return toast('Selecione ou crie um evento primeiro!', 'error');
+      document.getElementById('prodId').value = '';
+      document.getElementById('prodNome').value = '';
+      document.getElementById('prodPreco').value = '';
+      document.getElementById('prodEstoque').value = '20';
+      document.getElementById('modalProdTitle').textContent = id ? 'Editar Produto' : 'Cadastrar Produto no Evento';
+      if (id) {
+        const p = state.produtos.find(x => x.id === id);
+        if (p) {
+          document.getElementById('prodId').value = p.id;
+          document.getElementById('prodNome').value = p.nome;
+          document.getElementById('prodCat').value = p.categoria;
+          document.getElementById('prodPreco').value = p.preco;
+          document.getElementById('prodEstoque').value = p.estoque;
+        }
+      }
+      openModal('modalProduto');
+    }
+
+    async function saveProduto(e) {
+      e.preventDefault();
+      const id = document.getElementById('prodId').value;
+      const payload = {
+        evento_id: state.activeEventId,
+        nome: document.getElementById('prodNome').value.trim(),
+        categoria: document.getElementById('prodCat').value,
+        preco: parseFloat(document.getElementById('prodPreco').value),
+        estoque: parseInt(document.getElementById('prodEstoque').value, 10)
+      };
+
+      const { error } = id
+        ? await sb.from('produtos').update(payload).eq('id', id)
+        : await sb.from('produtos').insert(payload);
+
+      if (error) return toast(error.message, 'error');
+      closeModal('modalProduto');
+      await syncSupabase();
+      toast('Produto salvo!');
+    }
+
+    async function deleteProduto(id) {
+      if (!confirm('Remover este produto?')) return;
+      const { error } = await sb.from('produtos').delete().eq('id', id);
+      if (error) return toast(error.message, 'error');
+      await syncSupabase();
+    }
+
+    function openClienteModal(id = null) {
+      document.getElementById('cliId').value = '';
+      document.getElementById('cliNome').value = '';
+      document.getElementById('cliTel').value = '';
+      document.getElementById('cliObs').value = '';
+      document.getElementById('modalCliTitle').textContent = id ? 'Editar Cliente' : 'Cadastrar Cliente';
+      if (id) {
+        const c = state.clientes.find(x => x.id === id);
+        if (c) {
+          document.getElementById('cliId').value = c.id;
+          document.getElementById('cliNome').value = c.nome;
+          document.getElementById('cliTel').value = c.telefone || '';
+          document.getElementById('cliObs').value = c.obs || '';
+        }
+      }
+      openModal('modalCliente');
+    }
+
+    async function saveCliente(e) {
+      e.preventDefault();
+      const id = document.getElementById('cliId').value;
+      const payload = {
+        nome: document.getElementById('cliNome').value.trim(),
+        telefone: document.getElementById('cliTel').value.trim(),
+        obs: document.getElementById('cliObs').value.trim()
+      };
+      const { error } = id
+        ? await sb.from('clientes').update(payload).eq('id', id)
+        : await sb.from('clientes').insert(payload);
+      if (error) return toast(error.message, 'error');
+      closeModal('modalCliente');
+      await syncSupabase();
+      toast('Cliente salvo!');
+    }
+
+    async function deleteCliente(id) {
+      if (!confirm('Remover este cliente?')) return;
+      const { error } = await sb.from('clientes').delete().eq('id', id);
+      if (error) return toast(error.message, 'error');
+      await syncSupabase();
+    }
+
+    function addToCart(prodId) {
+      const p = state.produtos.find(x => x.id === prodId);
+      if (!p) return;
+      const item = cart.find(x => x.prodId === prodId);
+      const atual = item ? item.qtd : 0;
+      if (atual + 1 > p.estoque) return toast(`Estoque máximo atingido (${p.estoque} un)!`, 'error');
+      if (item) item.qtd++;
+      else cart.push({ prodId: p.id, nome: p.nome, preco: Number(p.preco), qtd: 1 });
+      renderCart();
+    }
+
+    function changeQty(prodId, delta) {
+      const idx = cart.findIndex(x => x.prodId === prodId);
+      if (idx === -1) return;
+      const p = state.produtos.find(x => x.id === prodId);
+      const nova = cart[idx].qtd + delta;
+      if (nova <= 0) cart.splice(idx, 1);
+      else if (p && nova > p.estoque) return toast('Estoque insuficiente!', 'error');
+      else cart[idx].qtd = nova;
+      renderCart();
+    }
+
+    function clearCart() {
+      cart = [];
+      document.getElementById('pdvPaidInput').value = '';
+      renderCart();
+    }
+
+    function renderCart() {
+      const box = document.getElementById('pdvCartList');
+      const total = cart.reduce((s, i) => s + i.preco * i.qtd, 0);
+      document.getElementById('pdvTotal').textContent = money(total);
+      if (!cart.length) {
+        box.innerHTML = `<p style="text-align:center; color:var(--text-muted); padding:20px 0; font-size:0.85rem;">Clique nos produtos ao lado para alimentar a comanda.</p>`;
+        return;
+      }
+      box.innerHTML = cart.map(i => `
+        <div class="cart-row">
+          <div>
+            <div style="font-weight:600; font-size:0.88rem;">${i.nome}</div>
+            <div style="font-size:0.76rem; color:var(--text-muted);">${money(i.preco)} x ${i.qtd} = <strong>${money(i.preco * i.qtd)}</strong></div>
+          </div>
+          <div style="display:flex; align-items:center; gap:6px;">
+            <button class="qty-btn" onclick="changeQty('${i.prodId}', -1)">-</button>
+            <strong>${i.qtd}</strong>
+            <button class="qty-btn" onclick="changeQty('${i.prodId}', 1)">+</button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    async function finalizarVenda(isFiado) {
+      if (!state.activeEventId) return toast('Selecione um evento primeiro!', 'error');
+      if (!cart.length) return toast('Adicione produtos na comanda!', 'error');
+
+      const total = cart.reduce((s, i) => s + i.preco * i.qtd, 0);
+      const cliId = document.getElementById('pdvClienteSelect').value || null;
+      const cliObj = state.clientes.find(c => c.id === cliId);
+      const cliNome = cliObj ? cliObj.nome : 'Consumidor Balcão';
+      const forma = document.getElementById('pdvPaymentMethod').value;
+      const rawPaid = document.getElementById('pdvPaidInput').value;
+
+      let pago = isFiado
+        ? (rawPaid !== '' ? Math.min(total, Math.max(0, parseFloat(rawPaid))) : 0)
+        : (rawPaid !== '' ? Math.min(total, Math.max(0, parseFloat(rawPaid))) : total);
+
+      if (pago < total && !cliId) return toast('Selecione ou cadastre o Cliente para deixar fiado!', 'error');
+
+      const resumo = cart.map(i => `${i.qtd}x ${i.nome}`).join(', ');
+
+      try {
+        const { data: com, error: comErr } = await sb.from('comandas').insert({
+          evento_id: state.activeEventId,
+          cliente_id: cliId,
+          cliente_nome: cliNome,
+          itens: cart,
+          resumo,
+          total,
+          pago
+        }).select().single();
+
+        if (comErr) throw comErr;
+
+        if (pago > 0) {
+          const { error: recErr } = await sb.from('recebimentos').insert({
+            evento_id: state.activeEventId,
+            comanda_id: com.id,
+            cliente_nome: cliNome,
+            descricao: resumo,
+            forma,
+            valor: pago
+          });
+          if (recErr) throw recErr;
+        }
+
+        for (const item of cart) {
+          const p = state.produtos.find(x => x.id === item.prodId);
+          if (p) {
+            await sb.from('produtos').update({ estoque: Math.max(0, p.estoque - item.qtd) }).eq('id', p.id);
+          }
+        }
+
+        clearCart();
+        await syncSupabase();
+        toast(pago >= total ? 'Venda paga e salva!' : `Comanda de ${cliNome} salva em Fiados!`);
+      } catch (err) {
+        toast('Erro ao salvar venda: ' + err.message, 'error');
+      }
+    }
+
+    function openReceberModal(comandaId) {
+      const c = state.comandas.find(x => x.id === comandaId);
+      if (!c) return;
+      const saldo = Number(c.total) - Number(c.pago);
+      document.getElementById('recComandaId').value = c.id;
+      document.getElementById('recValor').value = saldo.toFixed(2);
+      document.getElementById('recValor').max = saldo.toFixed(2);
+      document.getElementById('recInfoBox').innerHTML = `
+        <strong>Cliente:</strong> ${c.cliente_nome}<br>
+        <strong>Consumo:</strong> ${c.resumo}<br>
+        <strong>Total:</strong> ${money(c.total)} | <strong>Pago:</strong> ${money(c.pago)} | <strong style="color:var(--warning);">Saldo: ${money(saldo)}</strong>
+      `;
+      openModal('modalReceber');
+    }
+
+    async function confirmarRecebimento(e) {
+      e.preventDefault();
+      const c = state.comandas.find(x => x.id === document.getElementById('recComandaId').value);
+      if (!c) return;
+      const valor = parseFloat(document.getElementById('recValor').value);
+      const forma = document.getElementById('recForma').value;
+      const saldo = Number(c.total) - Number(c.pago);
+      if (valor <= 0 || valor > saldo + 0.01) return toast('Valor inválido!', 'error');
+
+      try {
+        const { error: recErr } = await sb.from('recebimentos').insert({
+          evento_id: c.evento_id,
+          comanda_id: c.id,
+          cliente_nome: c.cliente_nome,
+          descricao: `Baixa fiado (${c.resumo})`,
+          forma,
+          valor
+        });
+        if (recErr) throw recErr;
+
+        const { error: comErr } = await sb.from('comandas').update({ pago: Number(c.pago) + valor }).eq('id', c.id);
+        if (comErr) throw comErr;
+
+        closeModal('modalReceber');
+        await syncSupabase();
+        toast('Recebimento registrado!');
+      } catch (err) {
+        toast('Erro ao registrar: ' + err.message, 'error');
+      }
+    }
+
+    async function addDespesa(e) {
+      e.preventDefault();
+      if (!state.activeEventId) return toast('Selecione um evento primeiro!', 'error');
+      const { error } = await sb.from('despesas').insert({
+        evento_id: state.activeEventId,
+        nome: document.getElementById('despNome').value.trim(),
+        categoria: document.getElementById('despCat').value,
+        valor: parseFloat(document.getElementById('despValor').value),
+        data: document.getElementById('despData').value
+      });
+      if (error) return toast(error.message, 'error');
+      document.getElementById('despNome').value = '';
+      document.getElementById('despValor').value = '';
+      await syncSupabase();
+      toast('Despesa lançada!');
+    }
+
+    async function deleteDespesa(id) {
+      if (!confirm('Excluir esta despesa?')) return;
+      const { error } = await sb.from('despesas').delete().eq('id', id);
+      if (error) return toast(error.message, 'error');
+      await syncSupabase();
+    }
+
+    // =========================================================================
+    // RENDERIZAÇÃO DE TELAS E GRÁFICOS
+    // =========================================================================
+    function renderAll() {
+      const evId = state.activeEventId;
+      const sel = document.getElementById('activeEventSelect');
+      sel.innerHTML = state.eventos.length
+        ? state.eventos.map(e => `<option value="${e.id}">${e.nome}</option>`).join('')
+        : `<option value="">Nenhum evento cadastrado</option>`;
+      sel.value = evId;
+
+      const ev = state.eventos.find(e => e.id === evId);
+      const coms = state.comandas.filter(c => c.evento_id === evId);
+      const recs = state.recebimentos.filter(r => r.evento_id === evId);
+      const desps = state.despesas.filter(d => d.evento_id === evId);
+      const prods = state.produtos.filter(p => p.evento_id === evId);
+
+      document.getElementById('dashTitle').innerHTML = `<i data-lucide="layout-dashboard" style="color:var(--primary);"></i> ${ev ? ev.nome : 'Dashboard Geral'}`;
+      document.getElementById('dashSubtitle').textContent = ev ? `${fmtDate(ev.inicio)} a ${fmtDate(ev.fim)} • ${ev.local}` : 'Crie seu primeiro evento na aba Eventos.';
+
+      const vendaTotal = coms.reduce((s, c) => s + Number(c.total), 0);
+      const recebido = recs.reduce((s, r) => s + Number(r.valor), 0);
+      const fiado = Math.max(0, vendaTotal - recebido);
+      const despesas = desps.reduce((s, d) => s + Number(d.valor), 0);
+      const lucroReal = recebido - despesas;
+
+      document.getElementById('dashKpis').innerHTML = `
+        <div class="kpi-card"><div class="kpi-head"><span class="kpi-title">Venda Total</span><div class="kpi-icon" style="background:var(--primary-soft); color:var(--primary);"><i data-lucide="shopping-bag"></i></div></div><div class="kpi-val">${money(vendaTotal)}</div><div class="kpi-foot">${coms.length} comandas</div></div>
+        <div class="kpi-card"><div class="kpi-head"><span class="kpi-title">Total Recebido</span><div class="kpi-icon" style="background:var(--success-soft); color:var(--success);"><i data-lucide="wallet"></i></div></div><div class="kpi-val" style="color:var(--success);">${money(recebido)}</div><div class="kpi-foot">Em caixa</div></div>
+        <div class="kpi-card"><div class="kpi-head"><span class="kpi-title">Total Fiado (Aberto)</span><div class="kpi-icon" style="background:var(--warning-soft); color:var(--warning);"><i data-lucide="clock"></i></div></div><div class="kpi-val" style="color:var(--warning);">${money(fiado)}</div><div class="kpi-foot">A receber</div></div>
+        <div class="kpi-card"><div class="kpi-head"><span class="kpi-title">Total Despesas</span><div class="kpi-icon" style="background:var(--danger-soft); color:var(--danger);"><i data-lucide="trending-down"></i></div></div><div class="kpi-val" style="color:var(--danger);">${money(despesas)}</div><div class="kpi-foot">${desps.length} compras/gastos</div></div>
+        <div class="kpi-card" style="border-color:${lucroReal >= 0 ? 'var(--success)' : 'var(--danger)'};"><div class="kpi-head"><span class="kpi-title">Lucro / Prejuízo Real</span></div><div class="kpi-val" style="color:${lucroReal >= 0 ? 'var(--success)' : 'var(--danger)'};">${lucroReal >= 0 ? 'LUCRO ' : 'PREJUÍZO '}${money(lucroReal)}</div><div class="kpi-foot">Projetado c/ fiados: ${money(vendaTotal - despesas)}</div></div>
+      `;
+
+      renderCharts(coms, recs, recebido, fiado);
+
+      const stLabels = {
+        planejado: '<span class="badge badge-info">Planejado</span>',
+        em_andamento: '<span class="badge badge-success">Em andamento</span>',
+        finalizado: '<span class="badge badge-neutral">Finalizado</span>'
+      };
+      document.getElementById('eventosCardsGrid').innerHTML = state.eventos.length ? state.eventos.map(e => {
+        const vTot = state.comandas.filter(c => c.evento_id === e.id).reduce((s, c) => s + Number(c.total), 0);
+        const dTot = state.despesas.filter(d => d.evento_id === e.id).reduce((s, d) => s + Number(d.valor), 0);
+        const pQtd = state.produtos.filter(p => p.evento_id === e.id).length;
+        return `
+          <div class="card" style="${e.id === evId ? 'border-color:var(--primary);' : ''}">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:10px;">
+              <div>
+                <h3 style="font-size:1.05rem;">${e.nome}</h3>
+                <span style="font-size:0.78rem; color:var(--text-muted);">${fmtDate(e.inicio)} a ${fmtDate(e.fim)} • ${e.local}</span>
+              </div>
+              ${stLabels[e.status] || ''}
+            </div>
+            <p style="font-size:0.84rem; color:var(--text-muted); margin-bottom:12px;">${e.descricao || 'Sem descrição.'}</p>
+            <div style="background:var(--bg-input); padding:10px; border-radius:8px; font-size:0.82rem; display:flex; justify-content:space-between; margin-bottom:12px;">
+              <span>Produtos: <strong>${pQtd}</strong></span>
+              <span>Vendas: <strong style="color:var(--success);">${money(vTot)}</strong></span>
+              <span>Despesas: <strong style="color:var(--danger);">${money(dTot)}</strong></span>
+            </div>
+            <div style="display:flex; gap:6px; justify-content:flex-end;">
+              <button onclick="changeActiveEvent('${e.id}')" class="btn btn-secondary btn-sm">Selecionar</button>
+              <button onclick="openEventoModal('${e.id}')" class="btn btn-secondary btn-sm">Editar</button>
+              <button onclick="deleteEvento('${e.id}')" class="btn btn-danger btn-sm">X</button>
+            </div>
+          </div>
+        `;
+      }).join('') : `<div class="card" style="grid-column:1/-1; text-align:center; padding:30px; color:var(--text-muted);">Nenhum evento cadastrado ainda. Clique em "+ Novo Evento" ou "+ Criar Eventos Exemplo".</div>`;
+
+      renderPdv();
+      renderCart();
+
+      const fList = coms.filter(c => Number(c.total) - Number(c.pago) > 0.01);
+      document.getElementById('fiadosTotalHeader').textContent = `Total em Aberto: ${money(fiado)}`;
+      document.getElementById('fiadosTableBody').innerHTML = fList.length ? fList.map(c => `
+        <tr>
+          <td><strong>${c.cliente_nome}</strong></td>
+          <td>${new Date(c.data_hora).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}</td>
+          <td>${c.resumo}</td>
+          <td>${money(c.total)}</td>
+          <td style="color:var(--success);">${money(c.pago)}</td>
+          <td style="color:var(--warning); font-weight:800;">${money(Number(c.total) - Number(c.pago))}</td>
+          <td><button onclick="openReceberModal('${c.id}')" class="btn btn-success btn-sm">Receber</button></td>
+        </tr>
+      `).join('') : `<tr><td colspan="7" style="text-align:center; color:var(--text-muted); padding:20px;">Nenhuma comanda em aberto!</td></tr>`;
+
+      const formas = { Dinheiro: 0, PIX: 0, Cartão: 0 };
+      recs.forEach(r => { formas[r.forma] = (formas[r.forma] || 0) + Number(r.valor); });
+      document.getElementById('recebidosKpis').innerHTML = `
+        <div class="kpi-card"><div class="kpi-title">Dinheiro</div><div class="kpi-val">${money(formas.Dinheiro)}</div></div>
+        <div class="kpi-card"><div class="kpi-title">PIX</div><div class="kpi-val">${money(formas.PIX)}</div></div>
+        <div class="kpi-card"><div class="kpi-title">Cartão</div><div class="kpi-val">${money(formas.Cartão)}</div></div>
+        <div class="kpi-card"><div class="kpi-title">Total Recebido</div><div class="kpi-val" style="color:var(--success);">${money(recebido)}</div></div>
+      `;
+      document.getElementById('recebidosTableBody').innerHTML = recs.length ? recs.map(r => `
+        <tr>
+          <td>${new Date(r.data_hora).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}</td>
+          <td><strong>${r.cliente_nome}</strong></td>
+          <td>${r.descricao}</td>
+          <td><span class="badge badge-info">${r.forma}</span></td>
+          <td style="color:var(--success); font-weight:700;">${money(r.valor)}</td>
+        </tr>
+      `).join('') : `<tr><td colspan="5" style="text-align:center; color:var(--text-muted); padding:20px;">Nenhum recebimento registrado.</td></tr>`;
+
+      document.getElementById('produtosTableBody').innerHTML = prods.length ? prods.map(p => `
+        <tr>
+          <td><strong>${p.nome}</strong></td>
+          <td>${p.categoria}</td>
+          <td style="color:var(--success); font-weight:700;">${money(p.preco)}</td>
+          <td>${p.estoque <= 5 ? `<span class="badge badge-warning">${p.estoque} un</span>` : `<span class="badge badge-success">${p.estoque} un</span>`}</td>
+          <td>
+            <button onclick="openProdutoModal('${p.id}')" class="btn btn-secondary btn-sm">Editar</button>
+            <button onclick="deleteProduto('${p.id}')" class="btn btn-danger btn-sm">X</button>
+          </td>
+        </tr>
+      `).join('') : `<tr><td colspan="5" style="text-align:center; color:var(--text-muted); padding:20px;">Nenhum produto cadastrado neste evento.</td></tr>`;
+
+      document.getElementById('despesasTotalHeader').textContent = `Total Despesas: ${money(despesas)}`;
+      document.getElementById('despesasTableBody').innerHTML = desps.length ? desps.map(d => `
+        <tr>
+          <td>${fmtDate(d.data)}</td>
+          <td><strong>${d.nome}</strong></td>
+          <td>${d.categoria}</td>
+          <td style="color:var(--danger); font-weight:700;">${money(d.valor)}</td>
+          <td><button onclick="deleteDespesa('${d.id}')" class="btn btn-danger btn-sm">Excluir</button></td>
+        </tr>
+      `).join('') : `<tr><td colspan="5" style="text-align:center; color:var(--text-muted); padding:20px;">Nenhuma despesa registrada.</td></tr>`;
+
+      document.getElementById('clientesTableBody').innerHTML = state.clientes.length ? state.clientes.map(c => {
+        const cComs = state.comandas.filter(cm => cm.cliente_id === c.id);
+        const totGasto = cComs.reduce((s, cm) => s + Number(cm.total), 0);
+        const totDev = cComs.reduce((s, cm) => s + (Number(cm.total) - Number(cm.pago)), 0);
+        return `
+          <tr>
+            <td><strong>${c.nome}</strong></td>
+            <td>${c.telefone || '-'}</td>
+            <td>${c.obs || '-'}</td>
+            <td>${money(totGasto)}</td>
+            <td style="color:${totDev > 0 ? 'var(--warning)' : 'var(--text-muted)'}; font-weight:700;">${money(totDev)}</td>
+            <td>
+              <button onclick="openClienteModal('${c.id}')" class="btn btn-secondary btn-sm">Editar</button>
+              <button onclick="deleteCliente('${c.id}')" class="btn btn-danger btn-sm">X</button>
+            </td>
+          </tr>
+        `;
+      }).join('') : `<tr><td colspan="6" style="text-align:center; color:var(--text-muted); padding:20px;">Nenhum cliente cadastrado.</td></tr>`;
+
+      lucide.createIcons();
+    }
+
+    function renderPdv() {
+      const cliSel = document.getElementById('pdvClienteSelect');
+      const prev = cliSel.value;
+      cliSel.innerHTML = `<option value="">Consumidor Balcão (À vista)</option>` +
+        state.clientes.map(c => `<option value="${c.id}">${c.nome}</option>`).join('');
+      cliSel.value = prev;
+
+      const q = document.getElementById('pdvSearch').value.toLowerCase();
+      const cat = document.getElementById('pdvCatFilter').value;
+      const list = state.produtos.filter(p =>
+        p.evento_id === state.activeEventId &&
+        (!q || p.nome.toLowerCase().includes(q)) &&
+        (!cat || p.categoria === cat)
+      );
+
+      const grid = document.getElementById('pdvProductGrid');
+      grid.innerHTML = list.length ? list.map(p => `
+        <div class="prod-card ${p.estoque <= 0 ? 'out' : ''}" onclick="${p.estoque <= 0 ? '' : `addToCart('${p.id}')`}">
+          <div>
+            <div style="font-size:0.7rem; color:var(--primary); font-weight:700; text-transform:uppercase;">${p.categoria}</div>
+            <div style="font-weight:700; margin:4px 0;">${p.nome}</div>
+          </div>
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px; padding-top:6px; border-top:1px dashed var(--border);">
+            <strong style="color:var(--success);">${money(p.preco)}</strong>
+            <span style="font-size:0.75rem; color:var(--text-muted);">Est: ${p.estoque}</span>
+          </div>
+        </div>
+      `).join('') : `<p style="grid-column:1/-1; text-align:center; color:var(--text-muted); padding:20px;">Nenhum produto encontrado neste evento.</p>`;
+    }
+
+    function renderCharts(coms, recs, recebido, fiado) {
+      const txtColor = document.documentElement.getAttribute('data-theme') === 'dark' ? '#a1a1aa' : '#52525b';
+      Object.values(charts).forEach(ch => ch && ch.destroy());
+
+      charts.eventos = new Chart(document.getElementById('chartEventos'), {
+        type: 'bar',
+        data: {
+          labels: state.eventos.length ? state.eventos.map(e => e.nome) : ['Sem eventos'],
+          datasets: [{ label: 'Vendas (R$)', data: state.eventos.length ? state.eventos.map(e => state.comandas.filter(c => c.evento_id === e.id).reduce((s, c) => s + Number(c.total), 0)) : [0], backgroundColor: '#dc2626', borderRadius: 6 }]
+        },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { ticks: { color: txtColor } }, y: { ticks: { color: txtColor } } } }
+      });
+
+      const formas = { Dinheiro: 0, PIX: 0, Cartão: 0 };
+      recs.forEach(r => { formas[r.forma] = (formas[r.forma] || 0) + Number(r.valor); });
+      charts.pagamentos = new Chart(document.getElementById('chartPagamentos'), {
+        type: 'doughnut',
+        data: {
+          labels: ['Dinheiro', 'PIX', 'Cartão'],
+          datasets: [{ data: [formas.Dinheiro, formas.PIX, formas.Cartão], backgroundColor: ['#10b981', '#3b82f6', '#dc2626'], borderWidth: 0 }]
+        },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: txtColor } } } }
+      });
+
+      charts.fiados = new Chart(document.getElementById('chartFiados'), {
+        type: 'pie',
+        data: {
+          labels: ['Recebido (R$)', 'Fiado Pendente (R$)'],
+          datasets: [{ data: [recebido, fiado], backgroundColor: ['#10b981', '#f59e0b'], borderWidth: 0 }]
+        },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: txtColor } } } }
+      });
+
+      const prodCount = {};
+      coms.forEach(c => (c.itens || []).forEach(i => { prodCount[i.nome] = (prodCount[i.nome] || 0) + Number(i.qtd); }));
+      const top = Object.entries(prodCount).sort((a, b) => b[1] - a[1]).slice(0, 5);
+      charts.produtos = new Chart(document.getElementById('chartProdutos'), {
+        type: 'bar',
+        data: {
+          labels: top.length ? top.map(x => x[0]) : ['Sem vendas'],
+          datasets: [{ label: 'Qtd', data: top.length ? top.map(x => x[1]) : [0], backgroundColor: '#b91c1c', borderRadius: 6 }]
+        },
+        options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { ticks: { color: txtColor } }, y: { ticks: { color: txtColor } } } }
+      });
+    }
+  </script>
+</body>
+</html>
